@@ -1,0 +1,1 @@
+#define __BL_DISCORD_MESSAGE__
