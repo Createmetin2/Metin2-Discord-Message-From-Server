@@ -1,6 +1,6 @@
 ///Add
 #if defined(__BL_DISCORD_MESSAGE__)
-#include "Discord.h"
+#include "discord.hpp"
 #endif
 
 //Find
