@@ -21,7 +21,7 @@ public:
 
 private:
 	void __SendDiscordMessage(const char* szToken, std::uint64_t uChannelID, const std::string& sMessage);
-	void Loop();
+	void __Loop();
 
 private:
 	struct SDicordMessage

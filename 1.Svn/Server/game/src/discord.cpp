@@ -42,7 +42,7 @@ constexpr std::uint64_t arrChannels[EDiscordChannels::DISCORD_CHANNEL_MAX] =
 /****************Editable****************/
 
 CDiscordManager::CDiscordManager() :
-	thread_{ std::unique_ptr<std::thread>(new std::thread(&CDiscordManager::Loop, this)) }
+	thread_{ std::unique_ptr<std::thread>(new std::thread(&CDiscordManager::__Loop, this)) }
 {
 }
 
@@ -90,7 +90,7 @@ void CDiscordManager::__SendDiscordMessage(const char* szToken, std::uint64_t uC
 	}
 }
 
-void CDiscordManager::Loop()
+void CDiscordManager::__Loop()
 {
 	while (true)
 	{
