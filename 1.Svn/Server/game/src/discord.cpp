@@ -119,3 +119,29 @@ void CDiscordManager::__Loop()
 		__SendDiscordMessage(arrTokens[data->bTokenIndex], arrChannels[data->bChannelIndex], data->sMessage);
 	}
 }
+
+/** Get example
+
+/// pkg install nlohmann-json
+#include <nlohmann/json.hpp>
+static bool GetChannelName(const char* token, uint64_t channelid, std::string *str)
+{
+	try {
+		const std::string endpoint = "https://discord.com/api/v9/channels/" + std::to_string(channelid);
+		cpr::Response x = cpr::Get(
+			cpr::Url{ endpoint },
+			cpr::Header{ {"Authorization", token } }
+		);
+		const auto json = nlohmann::json::parse(x.text);
+		*str = json["name"].get<std::string>();
+	}
+	catch (std::exception ex)
+	{
+		sys_err("%s", ex.what());
+		return false;
+	}
+
+	return true;
+}
+
+**/
