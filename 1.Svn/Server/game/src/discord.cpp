@@ -17,7 +17,8 @@
 	/// Quote: > message
 	/// Code: `message`
 	/// Spoiler: ||message||
-	/// @: <@userid>
+	/// @user: <@userid>
+	/// #channel: <#channelid>
 /// </Special>
 
 /// <IMPORTANT!>
@@ -135,7 +136,7 @@ static bool GetChannelName(const char* token, uint64_t channelid, std::string *s
 		const auto json = nlohmann::json::parse(x.text);
 		*str = json["name"].get<std::string>();
 	}
-	catch (std::exception ex)
+	catch (const std::exception& ex)
 	{
 		sys_err("%s", ex.what());
 		return false;
