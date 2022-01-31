@@ -24,6 +24,8 @@
 4) Add "Bot " to the beginning of the token.
 ![black_bot](https://user-images.githubusercontent.com/33325253/151564666-7dd11678-a1c2-432e-bcbd-d10c5f581e4d.png)
 
-**For Your Account Token:** [Video](https://youtu.be/YEgFvgg7ZPI)
+**For Your Account Token(Self Bot / Not Recommended):** [Video](https://youtu.be/YEgFvgg7ZPI)
 
 **Token will change when you change your account's password.**
+
+[Remember the rules of discord before using self bot.](https://support.discord.com/hc/en-us/articles/115002192352-Automated-user-accounts-self-bots-)
