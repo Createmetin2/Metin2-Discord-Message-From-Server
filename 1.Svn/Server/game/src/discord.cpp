@@ -8,7 +8,11 @@
 #include "discord.hpp"
 
 #include "../common/tables.h"
-#include <cpr/cpr.h>
+
+#include <cpr/cpr.h> // https://github.com/libcpr/cpr
+
+#include <nlohmann/json.hpp> // https://github.com/nlohmann/json
+using json = nlohmann::json;
 
 /// <Special>
 	/// Bold: **message**
@@ -49,44 +53,138 @@ CDiscordManager::CDiscordManager() :
 
 CDiscordManager::~CDiscordManager()
 {
-	SendText(255, 255, ""); // out signal
+	AddEvent(std::unique_ptr<SDicordMessage>(new SDicordMessage{ EDiscordEventType::QUIT }));
 	thread_->join();
 };
 
+static std::string FormatString(const char* message, va_list args)
+{
+	const int len = vsnprintf(nullptr, 0, message, args) + 1;
+	if (len < 1)
+		return std::string();
+
+	const size_t size = static_cast<size_t>(len);
+	auto buf = std::unique_ptr<char[]>(new char[size]);
+	vsnprintf(buf.get(), size, message, args);
+
+	return std::string(buf.get(), buf.get() + size - 1);
+}
+
 void CDiscordManager::SendText(BYTE bTokenIndex, BYTE bChannelIndex, const char* format, ...)
 {
+	if (bTokenIndex >= EDiscordTokens::DISCORD_TOKEN_MAX)
+	{
+		sys_err("bTokenIndex out of range! (bTokenIndex: %d, EDiscordTokens::DISCORD_TOKEN_MAX: %d)", bTokenIndex, EDiscordTokens::DISCORD_TOKEN_MAX);
+		return;
+	}
+
+	if (bChannelIndex >= EDiscordChannels::DISCORD_CHANNEL_MAX)
+	{
+		sys_err("bChannelIndex out of range! (bChannelIndex: %d, EDiscordChannels::DISCORD_CHANNEL_MAX: %d)", bChannelIndex, EDiscordChannels::DISCORD_CHANNEL_MAX);
+		return;
+	}
+
 	va_list args;
 	va_start(args, format);
 
-	const int len = vsnprintf(nullptr, 0, format, args) + 1;
-	if (len > 0)
-	{
-		const size_t size = static_cast<size_t>(len);
-		auto buf = std::unique_ptr<char[]>(new char[size]);
-		vsnprintf(buf.get(), size, format, args);
-
-		auto data = std::unique_ptr<SDicordMessage>(new SDicordMessage{});
-		data->bTokenIndex = bTokenIndex;
-		data->bChannelIndex = bChannelIndex;
-		data->sMessage = std::string(buf.get(), buf.get() + size - 1);
-		
-		std::lock_guard<std::mutex> l(mutex_);
-		q_.push(std::move(data));
-		cv_.notify_one();
-	}
+	AddEvent(std::unique_ptr<SDicordMessage>(
+		new SDicordMessage{
+			EDiscordEventType::MESSAGE,
+			bTokenIndex,
+			bChannelIndex,
+			FormatString(format, args)
+		}
+	));
 
 	va_end(args);
 }
 
-void CDiscordManager::__SendDiscordMessage(const char* szToken, std::uint64_t uChannelID, const std::string& sMessage)
+void CDiscordManager::SendPrivateMessageText(BYTE bTokenIndex, std::uint64_t uUserID, const char* format, ...)
+{
+	if (bTokenIndex >= EDiscordTokens::DISCORD_TOKEN_MAX)
+	{
+		sys_err("bTokenIndex out of range! (bTokenIndex: %d, EDiscordTokens::DISCORD_TOKEN_MAX: %d)", bTokenIndex, EDiscordTokens::DISCORD_TOKEN_MAX);
+		return;
+	}
+
+	va_list args;
+	va_start(args, format);
+	
+	AddEvent(std::unique_ptr<SDicordMessage>(
+		new SDicordMessage{
+			EDiscordEventType::PRIVATEMESSAGE,
+			bTokenIndex,
+			0,
+			FormatString(format, args),
+			uUserID
+		}
+	));
+
+	va_end(args);
+}
+
+void CDiscordManager::AddEvent(std::unique_ptr<SDicordMessage>&& info)
+{
+	std::lock_guard<std::mutex> l(mutex_);
+	q_.push(std::move(info));
+	cv_.notify_one();
+}
+
+void CDiscordManager::__SendDiscordMessage(const std::unique_ptr<SDicordMessage>& info)
 {
 	try {
-		const std::string endpoint = "https://discord.com/api/v9/channels/" + std::to_string(uChannelID) + "/messages";
-		cpr::Response x = cpr::Post(cpr::Url{ endpoint },
-			cpr::Header{ {"Content-Type", "application/json"}, {"Authorization", szToken} },
-			cpr::Body{ "{\"content\":\"" + sMessage + "\"}" });
+		cpr::Header mapHeader{
+			{ "Content-Type", "application/json" },
+			{ "Authorization", arrTokens[info->bTokenIndex] }
+		};
+
+		const json jBody{
+			{ "content", info->sMessage }
+		};
+
+		std::string sChannelID = info->EEventType == EDiscordEventType::PRIVATEMESSAGE ? 
+			std::to_string(info->uExtraID) : std::to_string(arrChannels[info->bChannelIndex]);
+		
+		std::string sEndPoint = "https://discord.com/api/v9/channels/" + std::move(sChannelID) + "/messages";
+		cpr::Post(
+			cpr::Url{ std::move(sEndPoint) },
+			std::move(mapHeader),
+			cpr::Body{ jBody.dump() }
+		);
 	}
 	catch (const std::exception& ex) {
+		sys_err("%s", ex.what());
+	}
+}
+
+void CDiscordManager::__SendPrivateMessage(const std::unique_ptr<SDicordMessage>& info)
+{
+	try {
+		cpr::Header mapHeader{
+			{ "Content-Type", "application/json" },
+			{ "Authorization", arrTokens[info->bTokenIndex] }
+		};
+
+		const json jBody{
+			{ "recipient_id", info->uExtraID }
+		};
+
+		std::string sEndPoint = "https://discord.com/api/v9/users/@me/channels";
+		
+		const cpr::Response cPost = cpr::Post(
+			cpr::Url{ std::move(sEndPoint) },
+			std::move(mapHeader),
+			cpr::Body{ jBody.dump() }
+		);
+
+		const json jGet = nlohmann::json::parse(cPost.text);
+		const std::string& sPrivateMessageChannelID = jGet.at("id");
+		info->uExtraID = std::stoull(sPrivateMessageChannelID);
+
+		__SendDiscordMessage(info);
+	}
+	catch (const std::exception& ex)
+	{
 		sys_err("%s", ex.what());
 	}
 }
@@ -97,27 +195,23 @@ void CDiscordManager::__Loop()
 	{
 		std::unique_lock<std::mutex> l(mutex_);
 		cv_.wait(l, [&] { return !q_.empty(); });
-		
-		auto data{ std::move(q_.front()) };
+
+		auto info{ std::move(q_.front()) };
 		q_.pop();
 
-		// out signal
-		if (data->bTokenIndex == 255 && data->bChannelIndex == 255)
+		switch (info->EEventType)
+		{
+		case EDiscordEventType::MESSAGE:
+			__SendDiscordMessage(info);
+			break;
+		case EDiscordEventType::PRIVATEMESSAGE:
+			__SendPrivateMessage(info);
+			break;
+		case EDiscordEventType::QUIT:
 			return;
-
-		if (data->bTokenIndex >= EDiscordTokens::DISCORD_TOKEN_MAX)
-		{
-			sys_err("bTokenIndex out of range! (bTokenIndex: %d, EDiscordTokens::DISCORD_TOKEN_MAX: %d)", data->bTokenIndex, EDiscordTokens::DISCORD_TOKEN_MAX);
+		default:
 			continue;
 		}
-
-		if (data->bChannelIndex >= EDiscordChannels::DISCORD_CHANNEL_MAX)
-		{
-			sys_err("bChannelIndex out of range! (bChannelIndex: %d, EDiscordChannels::DISCORD_CHANNEL_MAX: %d)", data->bChannelIndex, EDiscordChannels::DISCORD_CHANNEL_MAX);
-			continue;
-		}
-
-		__SendDiscordMessage(arrTokens[data->bTokenIndex], arrChannels[data->bChannelIndex], data->sMessage);
 	}
 }
 

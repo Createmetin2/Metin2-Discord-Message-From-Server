@@ -4,9 +4,15 @@
 
 [![](https://img.youtube.com/vi/Fk2tgETGAI0/maxresdefault.jpg)](https://youtu.be/Fk2tgETGAI0)
 
+[![](https://img.youtube.com/vi/M5DGIm2s6PE/maxresdefault.jpg)](https://youtu.be/M5DGIm2s6PE)
+
 **You need: [CPR LIBRARY](https://github.com/libcpr/cpr)**
 
 > pkg install cpr
+
+**You need: [nlohmann json](https://github.com/nlohmann/json)** (minimum: 3.10.5)
+
+> pkg install nlohmann-json
 
 ### Get Channel ID(arrChannels):
 1) Discord/settings/advanced/ Enable **Developer Mode**.
